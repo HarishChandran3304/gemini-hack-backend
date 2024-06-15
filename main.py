@@ -1,42 +1,23 @@
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+import jwt
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
 from passlib.context import CryptContext
-from dotenv import load_dotenv
+
 import os
+from dotenv import load_dotenv
+
+from models import Token, TokenData, User, UserInDB
+from db import get_user_from_db, add_user_to_db
 
 
 load_dotenv()
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-
-fake_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "full_name": "John Doe",
-        "email": "johndoe@gmail.com",
-        "hashed_password": "$2b$12$WQtYRIwbdtZOdBQQA8KxceBtjjTtbOSwVZ/bwLUWtDXT9HruieK.S"
-    }
-}
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: str | None = None
-
-class User(BaseModel):
-    username: str
-    email: str | None = None
-    full_name: str | None = None
-
-class UserInDB(User):
-    hashed_password: str
+ACCESS_TOKEN_EXPIRE_MINUTES = 2
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -51,17 +32,18 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def get_user(db, username: str):
-    if username in db:
-        user_data = db[username]
-        return UserInDB(**user_data)
+async def get_user(username: str):
+    user = await get_user_from_db(username)
+    if user:
+        return UserInDB(**user)
+    return None
 
-def authenticate_user(db, username: str, password: str):
-    user = get_user(db, username)
+async def authenticate_user(username: str, password: str):
+    user = await get_user(username)
 
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, user.password):
         return False
     return user
 
@@ -69,19 +51,25 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.now() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now() + timedelta(minutes=30)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=30)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    invalid_credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    expired_credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -90,24 +78,46 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
 
         if username is None:
-            raise credentials_exception
+            raise invalid_credentials_exception
+        
         token_data = TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
+    
+    except ExpiredSignatureError:
+        raise expired_credentials_exception
+    
+    except InvalidTokenError:
+        raise invalid_credentials_exception
 
-    user = get_user(fake_db, username=token_data.username)
+    user = await get_user(username=token_data.username)
 
     if user is None:
-        raise credentials_exception
+        raise invalid_credentials_exception
 
     return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
     return current_user
 
-@app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_db, form_data.username, form_data.password)
+
+@app.get("/")
+async def read_root():
+    return {"Hello": "World"}
+
+@app.post("/register")
+async def register_user_route(user: UserInDB) -> User:
+    user = UserInDB(
+        username=user.username,
+        email=user.email,
+        password=get_password_hash(user.password),
+        bio=user.bio
+    )
+
+    await add_user_to_db(user)
+    return User(**user.model_dump())
+
+@app.post("/login")
+async def login_route(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
+    user = await authenticate_user(form_data.username, form_data.password)
 
     if not user:
         raise HTTPException(
@@ -121,12 +131,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return Token(access_token=access_token, token_type="bearer")
 
 @app.get("/users/me/", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
     return current_user
-
-@app.get("/users/me/items/")
-async def read_own_items(current_user: User = Depends(get_current_active_user)):
-    return [{"item_id": "Foo", "owner": current_user.username}]
