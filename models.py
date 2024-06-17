@@ -26,3 +26,10 @@ class Item(BaseModel):
     link: str
     tags: List[str]
     ended: Optional[bool] = False
+
+class Questions(BaseModel):
+    questions: list[dict[str, str]] = [
+        {"question": "what do you do?", "answer": ""},
+        {"question": "What are your interests?", "answer": ""},
+        {"question": "What are your achievements?", "answer": ""}
+    ]

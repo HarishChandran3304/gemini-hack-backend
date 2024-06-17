@@ -10,14 +10,14 @@ from passlib.context import CryptContext
 import os
 from dotenv import load_dotenv
 
-from models import Token, TokenData, User, UserInDB, Item
+from models import Token, TokenData, User, UserInDB, Item, Questions
 from db import get_user_from_db, add_user_to_db, add_item_to_db
 
 
 load_dotenv()
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 2
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -133,7 +133,7 @@ async def login_route(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 
     return Token(access_token=access_token, token_type="bearer")
 
-@app.get("/users/me/", response_model=User)
+@app.get("/users/me/")
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
     return current_user
 
@@ -141,3 +141,13 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_active
 async def create_item(item: Item) -> Item:
     await add_item_to_db(item)
     return item
+
+@app.get("/onboarding/")
+async def get_questions() -> Questions:
+    return Questions()
+
+@app.post("/onboarding/")
+async def onboard(current_user: Annotated[User, Depends(get_current_active_user)], answers: Questions) -> User:
+    # TODO: Take these questions and answers, perform RAG on them, generate a bio for each user and update their db entry
+    return current_user
+
