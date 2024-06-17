@@ -10,8 +10,8 @@ from passlib.context import CryptContext
 import os
 from dotenv import load_dotenv
 
-from models import Token, TokenData, User, UserInDB
-from db import get_user_from_db, add_user_to_db
+from models import Token, TokenData, User, UserInDB, Item
+from db import get_user_from_db, add_user_to_db, add_item_to_db
 
 
 load_dotenv()
@@ -136,3 +136,8 @@ async def login_route(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 @app.get("/users/me/", response_model=User)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
     return current_user
+
+@app.post("/items/")
+async def create_item(item: Item) -> Item:
+    await add_item_to_db(item)
+    return item
