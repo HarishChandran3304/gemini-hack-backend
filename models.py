@@ -35,3 +35,9 @@ class Questions(BaseModel):
         {"question": "What are your interests?", "answer": ""},
         {"question": "What are your achievements?", "answer": ""}
     ]
+
+class EmbeddingsQuery(BaseModel):
+    sentence: str
+
+class EmbeddingsResponse(BaseModel):
+    embedding: List[float]
