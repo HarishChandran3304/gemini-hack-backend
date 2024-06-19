@@ -37,8 +37,15 @@ async def update_if_item_ended(itemId: int):
         await items.update_one({"itemId": itemId}, {"$set": {"ended": True}})
         return True
 
+async def get_items_by_tag(tag: str) -> list[Item]:
+    items_list = []
+    async for item in items.find({"tags": tag}):
+        items_list.append(Item(**item))
+    return items_list
+
 async def main():
-    await update_if_item_ended(1)
+    res = await get_items_by_tag("test")
+    print(res)
 
 if __name__ == "__main__":
     import asyncio

@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 
 from models import Token, TokenData, User, UserInDB, Item, Questions
-from db import get_user_from_db, add_user_to_db, add_item_to_db
+from db import get_user_from_db, add_user_to_db, add_item_to_db, get_items_by_tag
 
 
 load_dotenv()
@@ -98,6 +98,24 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
     return current_user
 
+async def get_author_user(current_user: User = Depends(get_current_user)):
+    if current_user.role != "author":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You are not authorized to perform this action",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_user
+
+async def get_admin_user(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You are not authorized to perform this action",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_user
+
 
 @app.get("/")
 async def read_root():
@@ -138,16 +156,23 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_active
     return current_user
 
 @app.post("/items/")
-async def create_item(item: Item) -> Item:
+async def create_item_route(item: Item) -> Item:
     await add_item_to_db(item)
     return item
 
 @app.get("/onboarding/")
-async def get_questions() -> Questions:
+async def get_questions_route() -> Questions:
     return Questions()
 
 @app.post("/onboarding/")
-async def onboard(current_user: Annotated[User, Depends(get_current_active_user)], answers: Questions) -> User:
+async def onboard_user_route(current_user: Annotated[User, Depends(get_current_active_user)], answers: Questions) -> User:
     # TODO: Take these questions and answers, perform RAG on them, generate a bio for each user and update their db entry
     return current_user
 
+@app.get("/items/")
+async def get_items_by_tag_route(current_user: Annotated[User, Depends(get_current_active_user)], tag: str) -> list[Item]:
+    res = []
+    for tag in current_user.tags:
+        res.extend(await get_items_by_tag(tag))
+    
+    return res

@@ -12,7 +12,9 @@ class TokenData(BaseModel):
 class User(BaseModel):
     username: str
     email: str
+    role: Literal["user", "author", "admin"] = "user"
     bio: Optional[str] = ""
+    tags: Optional[List[str]] = []
 
 class UserInDB(User):
     password: str
