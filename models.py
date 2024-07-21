@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal, List, Optional
+from typing import Literal, List, Dict, Optional
 from datetime import datetime
 
 class Token(BaseModel):
@@ -9,35 +9,46 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: str
 
+class Answers(BaseModel):
+    answers: List[Dict[str, str]]
+
 class User(BaseModel):
     username: str
     email: str
     role: Literal["user", "author", "admin"] = "user"
-    bio: Optional[str] = ""
+    bio: Optional[Answers]
     tags: Optional[List[str]] = []
+    likes: Optional[List[int]] = []
 
 class UserInDB(User):
     password: str
 
-class Item(BaseModel):
-    itemId: int
-    name: str
-    itemType: Literal["Contest", "Project", "Activity", "Event"]
-    desc: str
+class EventData(BaseModel):
     date: datetime
-    link: str
-    tags: List[str]
-    ended: Optional[bool] = False
+    location: Literal["online", "offline"]
+    prize: str
+    organizer: str
 
-class Questions(BaseModel):
-    questions: list[dict[str, str]] = [
-        {"question": "what do you do?", "answer": ""},
-        {"question": "What are your interests?", "answer": ""},
-        {"question": "What are your achievements?", "answer": ""}
-    ]
+class Event(BaseModel):
+    itemId: int
+    title: str
+    imageUrl: str
+    tags: List[str]
+    data: EventData
+    description: str
+    category: Literal["event", "challenge", "workshop", "project", "contest"]
 
 class EmbeddingsQuery(BaseModel):
     sentence: str
 
 class EmbeddingsResponse(BaseModel):
     embedding: List[float]
+
+class Profile(BaseModel):
+    name: str
+    grade: str
+    school: str
+    description: str
+    profilePic: str
+    tags: List[str]
+    eventList: List[Event] = []
